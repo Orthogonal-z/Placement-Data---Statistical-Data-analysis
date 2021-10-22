@@ -1,0 +1,227 @@
+---
+title: "Campus Recruitment"
+author: "Kapil Rana"
+date: "19/10/2021"
+output:
+  word_document: default
+  pdf_document: default
+subtitle: Academic and Employability Factors Influencing Placements
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+```
+
+
+```{r}
+library(tidyverse)
+library(dlookr)
+library(ggthemes)
+library(rstatix)
+```
+
+
+```{r}
+setwd("C:\\Users\\kapil\\Desktop\\(Project)\\R-practice\\Placement Data")
+getwd()
+
+placement <- readr::read_csv("Placement.csv")
+View(placement)
+
+placement <- placement %>% 
+  rename("serial" = sl_no)
+```
+
+
+```{r}
+#About Data
+columns <- names(placement)
+
+description <- c(
+"Serial",
+"Gender: Male='M', Female='F'",
+"Secondary Education Percentage (grades 9 and 10) - exam at the end of 10th grade",
+"Board of Education - Central/Others",
+"Higher Secondary Education (grades 11 and 12) - exam at the end of 12th grade",
+"Board of Education - Central/Others",
+"Specialization in Higher Secondary Education",
+"Degree Percentage",
+"Undergraduate (Degree type) - Field of degree education",
+"Work Experience - Yes/No",
+"Employability test Percentage (conducted by college)",
+"Post Graduation (MBA) - Specialization",
+"MBA percentage",
+"Status of placement - Placed/Not placed",
+"Salary offered by corporate to candidates")
+
+dataset_table <-as.data.frame(cbind(columns,  description))
+dataset_table
+```
+
+
+```{r}
+#Check for NA values
+sapply(placement, function(x) sum(is.na(x)))
+
+#Only salary column has 67 NA values 
+dlookr::plot_na_pareto(placement)
+
+#As 67 students are not placed so we have 67 NA's in Salary Column 
+placement %>% 
+  count(status, sort = T)
+```
+
+
+```{r}
+#Correlation between numerical variables
+data_cor <- placement %>% 
+  select(ssc_p, hsc_p, degree_p, etest_p, mba_p)
+
+my_cols <- c("#00AFBB", "#E7B800")
+pairs(data_cor, pch = 19,  cex = 0.5,
+      col = my_cols,
+      lower.panel=NULL)
+
+
+#There is a medium correlation between academic scores it means those who performed well in their secondary education also perform well with higher secondary and bachelor degree but employability test scores only had a low correlation with academic scores.
+data <- as.data.frame(cor(data_cor))
+data
+
+```
+
+
+```{r}
+#Check the Percentage of the students with Status 
+#Out of 215 Students only 148 students were  placed 
+placement %>% 
+  mutate(total = (ssc_p + hsc_p + degree_p + mba_p)/4) %>% 
+  ggplot(aes(total, fill = status)) + 
+  geom_histogram(binwidth = 5, col = "black") +
+  labs(x = "Average Scores across all four levels", 
+       y = "Number of Students", 
+       title = "Out of 215 students only 67 were not selected")+
+  ggthemes::theme_few()
+
+#Most no. of student who get placed are from commerce background
+placement %>% 
+  ggplot(aes(degree_t)) +
+  geom_bar(aes(fill = placement$status), col = "black") +
+  coord_flip() +
+  labs(x = "Degree type", 
+       y = "Total",
+       fill = guide_legend(title = "Status")) + 
+  ggthemes::theme_few()
+```
+ 
+```{r}
+
+#Lets check the distribution of Scores look like for each level of education Employability test has a different distribution than the others with very wide and almost equal distribution of each bucket 
+
+distribution <- function(level, Lev_name) {
+  placement %>% 
+    ggplot(aes(level)) +
+    geom_histogram(binwidth = 5, fill = "#ff6600" ,col = "black") + 
+    coord_cartesian(xlim = c(30,100),
+                    ylim = c(0,70)) +
+    labs(x = "Score", 
+         y = "Number of Students",
+         title = Lev_name) + 
+    ggthemes::theme_few()
+}
+
+
+distribution(placement$ssc_p, "Senior_Secondary")
+distribution(placement$hsc_p, "Higher_Secondary")
+distribution(placement$degree_p, "Unniversity")
+distribution(placement$mba_p, "MBA")
+distribution(placement$etest_p, "Employability_Test")
+```
+
+
+```{r}
+
+#Is there any significant difference between Genders and their Academic & E.test score?
+#Density plot shows that females score higher than the male but the t.test gave the p.value lower than the alpha(0.05) We have to reject the null hypothesis,It means there is no significant differences in performance ##during University and MBA levels
+
+#Lets Find Out 
+
+placement %>% 
+  ggplot(aes(degree_p, fill = gender, col = gender)) +
+  geom_density(alpha = 0.3, lwd = 1, show.legend = T) +
+  geom_rug() +
+  labs(x = "Scores",
+       title = "Distribution of Scores at University level between Genders") +
+  ggthemes::theme_few()
+
+placement %>% 
+  ggplot(aes(mba_p, fill = gender, col = gender)) +
+  geom_density(alpha = 0.3, lwd = 1, show.legend = T) +
+  geom_rug() +
+  labs(x = "Scores",
+       title = "Distribution of Scores at MBA level between Genders") +
+  ggthemes::theme_few()
+
+placement %>% 
+  ggplot(aes(etest_p, fill = gender, col = gender)) +
+  geom_density(alpha = 0.3, lwd = 1, show.legend = T) +
+  geom_rug() +
+  labs(x = "Scores",
+       title = "Distribution of Scores at E.Test level between Genders") +
+  ggthemes::theme_few()
+
+##Now check the significance with a statistical test 
+placement %>% 
+  t_test(degree_p ~ gender, conf.level = 0.95) %>% 
+  add_significance()
+
+placement %>% 
+  t_test(mba_p ~ gender, conf.level = 0.95)
+  
+```
+
+
+```{r}
+#As the score became more concentrated around median as the student progressed in their education, we could infer that there was less chance of differentiating themselves based on grade and more based on other factors such as : employability score, work experience, technical skills, soft skills, better interviewing skills, extra-curricular experience
+
+#ANOVA  test to check whether Type of Degree(commerce, science & arts) had any significant impact on the avg. MBA marks 
+
+#As p.value is more than our critical value 0.05, we can conclude that mean of MBA marks under dufferent degree types are same 
+aov(mba_p ~ degree_t, data = placement) %>% 
+  summary()
+
+#Visualize 
+placement %>% 
+  ggplot(aes(degree_t, mba_p)) +
+  geom_boxplot(fill = "#32a2a8", col = "black") +
+  ggthemes::theme_few()
+
+#Bartlett's  test to check homegeniety of variance among Types of Degrees with regarding to MBA marks 
+#As p.value is more than our critical value 0.05, it suggest that the variance among groups is equal 
+bartlett.test(as.numeric(mba_p) ~ as.factor(degree_t), data = placement)
+
+```
+
+
+```{r}
+#ANOVA  test to check whether Type of Degree(commerce, science & arts) had any significant impact on the Salary 
+
+#As p value is more than 0.05,  We can conclude that the mean salary under different degree type are same
+aov(salary ~ degree_t, data = placement) %>% 
+  summary()
+
+#Bartlett's  test to check homegeniety of variance among Types of Degrees with regarding Salary 
+#As p.value is more than our critical value 0.05, it suggest that the variance among groups is equal 
+bartlett.test(as.numeric(salary) ~ as.factor(degree_t), data = placement)
+```
+
+```{r}
+
+#Chi-square test to check whether the type of degree has any impact on Status(Placed or not placed), we are using chi2 test as both of our column are factor column 
+contigency <- with(placement, table(placement$degree_t, placement$status))
+contigency <- as.matrix(contigency)
+contigency
+
+#As p.value is more than our critical value 0.05, we conclude that two categorical variables are independent in some population.
+chi.test <- chisq.test(contigency, correct = F)
+chi.test
+```
